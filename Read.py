@@ -24,6 +24,10 @@
 import RPi.GPIO as GPIO
 import MFRC522
 import signal
+import os
+import time
+import subprocess
+import sys
 
 continue_reading = True
 
@@ -44,6 +48,8 @@ MIFAREReader = MFRC522.MFRC522()
 print "Welcome to the MFRC522 data read example"
 print "Press Ctrl-C to stop."
 
+current_uid = None
+
 # This loop keeps checking for chips. If one is near it will get the UID and authenticate
 while continue_reading:
     
@@ -51,31 +57,42 @@ while continue_reading:
     (status,TagType) = MIFAREReader.MFRC522_Request(MIFAREReader.PICC_REQIDL)
 
     # If a card is found
-    if status == MIFAREReader.MI_OK:
-        print "Card detected"
+    if status != MIFAREReader.MI_OK:
+        time.sleep(0.2)
+        continue
     
     # Get the UID of the card
     (status,uid) = MIFAREReader.MFRC522_Anticoll()
 
     # If we have the UID, continue
     if status == MIFAREReader.MI_OK:
+        if uid == current_uid:
+          continue
 
-        # Print UID
-        print "Card read UID: %s,%s,%s,%s" % (uid[0], uid[1], uid[2], uid[3])
-    
-        # This is the default key for authentication
-        key = [0xFF,0xFF,0xFF,0xFF,0xFF,0xFF]
-        
-        # Select the scanned tag
-        MIFAREReader.MFRC522_SelectTag(uid)
-
-        # Authenticate
-        status = MIFAREReader.MFRC522_Auth(MIFAREReader.PICC_AUTHENT1A, 8, key, uid)
-
-        # Check if authenticated
-        if status == MIFAREReader.MI_OK:
-            MIFAREReader.MFRC522_Read(8)
-            MIFAREReader.MFRC522_StopCrypto1()
+        tags = {}
+        with open("/home/pi/work/MFRC522-python/tags.dat", "r") as fil:
+          for line in fil:
+            k, v = line.rstrip('\n').split(' ', 1)
+            tags[k] = v
+        k = "%d,%d,%d,%d" % (uid[0], uid[1], uid[2], uid[3])
+        if k in tags:
+          v = tags[k]
+          if (v.startswith("x ")):
+            if (v.startswith("x volume ")):
+              subprocess.call(["mpc", "volume", v[9:]])
+            else:
+              sys.stderr.write("invalid command: %s\n" % (v))
+          else:
+            subprocess.call(["mpc", "clear"])
+            if (v.startswith("l ")):
+              subprocess.call(["mpc", "load", v[2:]])
+            elif (v.startswith("p ")):
+              subprocess.call(["mpc", "add", v])
+            else:
+              subprocess.call(["mpc", "add", v])
+            subprocess.call(["mpc", "play"])
+            current_uid = uid
         else:
-            print "Authentication error"
+          sys.stderr.write("card not in database: %s\n" % (k))
+          current_uid = uid
 

@@ -1,0 +1,12 @@
+[Unit]
+Description=nfcd
+After=mpd.service
+
+[Service]
+User=pi
+Group=pi
+ExecStart=/usr/bin/python /home/pi/work/MFRC522-python/Read.py
+
+[Install]
+WantedBy=multi-user.target
+
